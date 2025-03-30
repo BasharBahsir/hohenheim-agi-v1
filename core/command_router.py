@@ -70,11 +70,24 @@ class CommandRouter:
             "Use reasoning capabilities to think about a topic"
         )
         
+        self.register_command(
+            r"^(analyze|advanced\s+think|deep\s+think)\s+about\s+(.+)$", 
+            self._handle_advanced_reasoning_command,
+            "Use advanced reasoning (Claude Sonnet) for complex analysis"
+        )
+        
+        # Self-reflection command
+        self.register_command(
+            r"^(reflect|self[\s-]reflect)$", 
+            self._handle_self_reflection_command,
+            "Perform system self-reflection to identify improvements"
+        )
+        
         # Uncensored mode commands
         self.register_command(
             r"^(enable|activate)\s+uncensored(\s+mode)?$", 
             lambda match, context: self._handle_uncensored_mode_command(match, context, True),
-            "Enable uncensored mode using local Qwen-14B"
+            "Enable uncensored mode using local LM Studio server"
         )
         
         self.register_command(
@@ -228,13 +241,51 @@ class CommandRouter:
             "success": True
         }
     
+    def _handle_advanced_reasoning_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the advanced reasoning command"""
+        query = match.group(2)
+        
+        # Use the advanced reasoning capability (Claude Sonnet)
+        reasoning_result = self.agi_core.advanced_reason(query, context)
+        
+        return {
+            "message": "Here's my advanced analysis:",
+            "reasoning": reasoning_result.get("reasoning", ""),
+            "source": reasoning_result.get("source", "unknown"),
+            "success": True
+        }
+    
+    def _handle_self_reflection_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the self-reflection command"""
+        # Perform self-reflection
+        reflection_result = self.agi_core.self_reflect()
+        
+        return {
+            "message": "Self-reflection results:",
+            "reasoning": reflection_result.get("reasoning", ""),
+            "source": reflection_result.get("source", "unknown"),
+            "success": True
+        }
+    
     def _handle_uncensored_mode_command(self, match, context: Dict[str, Any], enable: bool) -> Dict[str, Any]:
         """Handle the uncensored mode command"""
+        # Check if local server is available before enabling
+        if enable:
+            from agents.uncensored_agent import check_local_server_status
+            server_available = check_local_server_status()
+            
+            if not server_available:
+                return {
+                    "message": "Cannot enable uncensored mode. Local LM Studio server is not available at the configured URL.",
+                    "uncensored_mode": False,
+                    "success": False
+                }
+        
         current_state = self.agi_core.toggle_uncensored_mode(enable)
         
         if current_state:
             return {
-                "message": "Uncensored mode is now enabled. Using local Qwen-14B for unrestricted reasoning.",
+                "message": "Uncensored mode is now enabled. Using local LM Studio server for unrestricted reasoning.",
                 "uncensored_mode": True,
                 "success": True
             }

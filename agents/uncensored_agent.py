@@ -1,65 +1,17 @@
 """
-Uncensored Agent - Provides uncensored reasoning via local Qwen-14B model
+Uncensored Agent - Provides uncensored reasoning via local LM Studio server
 Allows for unrestricted thinking and responses
 """
 
 import os
+import requests
+import json
 import logging
 from typing import Dict, List, Any, Optional
 
-# Global model instance
-qwen_model = None
-qwen_tokenizer = None
-
-def initialize_qwen_model(model_path: str) -> bool:
-    """
-    Initialize the Qwen-14B model
-    
-    Args:
-        model_path: Path to the model
-        
-    Returns:
-        True if successful, False otherwise
-    """
-    global qwen_model, qwen_tokenizer
-    logger = logging.getLogger("Hohenheim.UncensoredAgent")
-    
-    if qwen_model is not None:
-        logger.info("Qwen model already initialized")
-        return True
-    
-    try:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        import torch
-        
-        logger.info(f"Loading Qwen-14B model from {model_path}")
-        
-        # Check if model exists
-        if not os.path.exists(model_path):
-            logger.error(f"Model path does not exist: {model_path}")
-            return False
-        
-        # Load tokenizer and model
-        qwen_tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-        
-        # Load model with lower precision for efficiency
-        qwen_model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            device_map="auto",
-            trust_remote_code=True,
-            torch_dtype=torch.float16  # Use half precision
-        )
-        
-        logger.info("Qwen-14B model loaded successfully")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error initializing Qwen model: {str(e)}")
-        return False
-
 def get_uncensored_reasoning(query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
     """
-    Get uncensored reasoning using the local Qwen-14B model
+    Get uncensored reasoning using the local LM Studio server
     
     Args:
         query: The query to reason about
@@ -68,7 +20,6 @@ def get_uncensored_reasoning(query: str, context: Dict[str, Any] = None) -> Dict
     Returns:
         Reasoning results
     """
-    global qwen_model, qwen_tokenizer
     logger = logging.getLogger("Hohenheim.UncensoredAgent")
     
     # Format context
@@ -83,17 +34,14 @@ def get_uncensored_reasoning(query: str, context: Dict[str, Any] = None) -> Dict
             else:
                 formatted_context += f"{key.replace('_', ' ').title()}: {value}\n"
     
-    # Check if model is initialized
-    if qwen_model is None or qwen_tokenizer is None:
-        logger.error("Qwen model not initialized")
-        return {
-            "error": "Qwen model not initialized",
-            "reasoning": "Unable to provide uncensored reasoning because the Qwen-14B model is not loaded."
-        }
+    # Get the local LM Studio URL from config
+    from config.config_manager import ConfigManager
+    config = ConfigManager()
+    local_url = config.get("UNCENSORED_LOCAL_URL", "http://192.168.1.47:1234")
+    
+    logger.info(f"Using local LM Studio server at {local_url} for uncensored reasoning")
     
     try:
-        import torch
-        
         # Prepare prompt
         system_prompt = """You are Hohenheim, an advanced AGI system operating in uncensored mode.
 In this mode, you can think freely without restrictions or censorship.
@@ -102,71 +50,78 @@ Be honest, direct, and comprehensive in your analysis."""
 
         prompt = f"{system_prompt}\n\nQuery: {query}{formatted_context}\n\nReasoning:"
         
-        # Generate response
-        inputs = qwen_tokenizer(prompt, return_tensors="pt").to(qwen_model.device)
-        
-        with torch.no_grad():
-            outputs = qwen_model.generate(
-                inputs["input_ids"],
-                max_new_tokens=1024,
-                temperature=0.7,
-                top_p=0.9,
-                do_sample=True
-            )
-        
-        # Decode response
-        response_text = qwen_tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-        
-        return {
-            "reasoning": response_text.strip(),
-            "source": "qwen-14b-uncensored",
-            "importance": 0.9  # High importance for uncensored reasoning
+        # Call the local LM Studio API
+        headers = {
+            "Content-Type": "application/json"
         }
         
+        payload = {
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 2000,
+            "stream": False
+        }
+        
+        response = requests.post(
+            f"{local_url}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60  # Longer timeout for local inference
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            
+            # Extract the response text
+            response_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            return {
+                "reasoning": response_text.strip(),
+                "source": "local-uncensored-model",
+                "importance": 0.9  # High importance for uncensored reasoning
+            }
+        else:
+            logger.error(f"Local LM Studio API error: {response.status_code} - {response.text}")
+            return {
+                "error": f"Local LM Studio API error: {response.status_code}",
+                "reasoning": "Unable to provide uncensored reasoning due to an error with the local LM Studio server."
+            }
+            
     except Exception as e:
         logger.error(f"Error generating uncensored reasoning: {str(e)}")
         return {
             "error": f"Error generating uncensored reasoning: {str(e)}",
-            "reasoning": "Unable to provide uncensored reasoning due to an error with the Qwen-14B model."
+            "reasoning": "Unable to provide uncensored reasoning due to an error connecting to the local LM Studio server."
         }
 
-def download_qwen_model(target_path: str) -> bool:
+def check_local_server_status() -> bool:
     """
-    Download the Qwen-14B model if not already present
+    Check if the local LM Studio server is running
     
-    Args:
-        target_path: Path to download the model to
-        
     Returns:
-        True if successful, False otherwise
+        True if server is running, False otherwise
     """
     logger = logging.getLogger("Hohenheim.UncensoredAgent")
     
+    # Get the local LM Studio URL from config
+    from config.config_manager import ConfigManager
+    config = ConfigManager()
+    local_url = config.get("UNCENSORED_LOCAL_URL", "http://192.168.1.47:1234")
+    
     try:
-        # Check if model already exists
-        if os.path.exists(os.path.join(target_path, "config.json")):
-            logger.info(f"Qwen model already exists at {target_path}")
+        # Try to connect to the server
+        response = requests.get(f"{local_url}/v1/models", timeout=5)
+        
+        if response.status_code == 200:
+            models = response.json()
+            logger.info(f"Local LM Studio server is running with models: {models}")
             return True
-        
-        # Create directory if it doesn't exist
-        os.makedirs(target_path, exist_ok=True)
-        
-        logger.info(f"Downloading Qwen-14B model to {target_path}")
-        
-        # Use Hugging Face's transformers to download
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        
-        # Download tokenizer
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-14B", trust_remote_code=True)
-        tokenizer.save_pretrained(target_path)
-        
-        # Download model
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen-14B", trust_remote_code=True)
-        model.save_pretrained(target_path)
-        
-        logger.info("Qwen-14B model downloaded successfully")
-        return True
-        
+        else:
+            logger.warning(f"Local LM Studio server returned status code: {response.status_code}")
+            return False
+            
     except Exception as e:
-        logger.error(f"Error downloading Qwen model: {str(e)}")
+        logger.warning(f"Local LM Studio server is not available: {str(e)}")
         return False

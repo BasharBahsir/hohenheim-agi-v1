@@ -177,11 +177,11 @@ class HohenheimAGI:
         
         # Use API for reasoning
         if self.uncensored_mode:
-            # Use local Qwen model for uncensored reasoning
+            # Use local LM Studio server for uncensored reasoning
             from agents.uncensored_agent import get_uncensored_reasoning
             result = get_uncensored_reasoning(query, reasoning_context)
         else:
-            # Use DeepSeek-R1 or Sonnet for reasoning
+            # Use DeepSeek by default for general reasoning
             result = self.api_manager.get_reasoning(query, reasoning_context)
         
         # Store reasoning in memory
@@ -202,6 +202,52 @@ class HohenheimAGI:
         
         return result
     
+    def advanced_reason(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Use advanced reasoning capabilities (Claude Sonnet) for complex tasks
+        
+        Args:
+            query: The question or problem to reason about
+            context: Additional context for reasoning
+            
+        Returns:
+            Advanced reasoning results
+        """
+        # Combine current context with provided context
+        reasoning_context = self.current_context.copy()
+        if context:
+            reasoning_context.update(context)
+        
+        # Get relevant memories
+        relevant_memories = self.long_term_memory.search(query, limit=8)  # More memories for complex reasoning
+        reasoning_context["relevant_memories"] = relevant_memories
+        
+        # Use API for advanced reasoning (Claude Sonnet)
+        if self.uncensored_mode:
+            # Use local LM Studio server for uncensored reasoning
+            from agents.uncensored_agent import get_uncensored_reasoning
+            result = get_uncensored_reasoning(query, reasoning_context)
+        else:
+            # Use Claude for advanced reasoning
+            result = self.api_manager.get_advanced_reasoning(query, reasoning_context)
+        
+        # Store reasoning in memory
+        self.short_term_memory.add("advanced_reasoning", {
+            "query": query,
+            "result": result,
+            "context": reasoning_context,
+            "timestamp": self.short_term_memory.get_timestamp()
+        })
+        
+        # Store important reasoning in long-term memory (always store advanced reasoning)
+        self.long_term_memory.add(
+            query, 
+            result.get("reasoning", ""), 
+            metadata={"type": "advanced_reasoning", "importance": result.get("importance", 0.9)}
+        )
+        
+        return result
+    
     def self_reflect(self) -> Dict[str, Any]:
         """
         Perform self-reflection to improve system performance
@@ -212,9 +258,9 @@ class HohenheimAGI:
         # Get recent memories
         recent_memories = self.short_term_memory.get_recent(limit=20)
         
-        # Perform reflection using API
+        # Perform reflection using advanced reasoning (Claude)
         reflection_prompt = "Analyze recent system performance and identify areas for improvement"
-        reflection = self.api_manager.get_reasoning(reflection_prompt, {"recent_memories": recent_memories})
+        reflection = self.api_manager.get_advanced_reasoning(reflection_prompt, {"recent_memories": recent_memories})
         
         # Store reflection in memory
         self.short_term_memory.add("reflection", {

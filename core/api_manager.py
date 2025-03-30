@@ -1,6 +1,6 @@
 """
 API Manager - Handles all external API integrations
-Primarily manages DeepSeek-R1 and Sonnet-3.7 APIs for reasoning capabilities
+Primarily manages DeepSeek-Chat and Claude-3.7-Sonnet APIs for reasoning capabilities
 """
 
 import os
@@ -27,23 +27,32 @@ class APIManager:
         
         # Load API keys from config
         self.deepseek_api_key = self.config.get("DEEPSEEK_API_KEY")
-        self.sonnet_api_key = self.config.get("SONNET_API_KEY")
+        self.claude_api_key = self.config.get("CLAUDE_API_KEY")
+        
+        # Load model configurations
+        self.deepseek_model = self.config.get("DEEPSEEK_MODEL", "deepseek-chat")
+        self.deepseek_max_tokens = int(self.config.get("DEEPSEEK_MAX_TOKENS", 4096))
+        self.deepseek_temperature = float(self.config.get("DEEPSEEK_TEMPERATURE", 0.7))
+        
+        self.claude_model = self.config.get("CLAUDE_MODEL", "claude-3-7-sonnet-20250219")
+        self.claude_max_tokens = int(self.config.get("CLAUDE_MAX_TOKENS", 4096))
+        self.claude_temperature = float(self.config.get("CLAUDE_TEMPERATURE", 0.7))
         
         # API endpoints
-        self.deepseek_endpoint = "https://api.deepseek.com/v1/reasoning"
-        self.sonnet_endpoint = "https://api.sonnet.ai/v1/chat/completions"
+        self.deepseek_endpoint = "https://api.deepseek.com/v1/chat/completions"
+        self.claude_endpoint = "https://api.anthropic.com/v1/messages"
         
         # Verify API keys
         self._verify_api_keys()
         
     def _verify_api_keys(self) -> None:
         """Verify that required API keys are available"""
-        if not self.deepseek_api_key and not self.sonnet_api_key:
+        if not self.deepseek_api_key and not self.claude_api_key:
             self.logger.warning("No API keys configured. Reasoning capabilities will be limited.")
         elif not self.deepseek_api_key:
-            self.logger.warning("DeepSeek API key not configured. Using Sonnet API only.")
-        elif not self.sonnet_api_key:
-            self.logger.warning("Sonnet API key not configured. Using DeepSeek API only.")
+            self.logger.warning("DeepSeek API key not configured. Using Claude API only.")
+        elif not self.claude_api_key:
+            self.logger.warning("Claude API key not configured. Using DeepSeek API only.")
         else:
             self.logger.info("All API keys configured successfully.")
     
@@ -58,11 +67,32 @@ class APIManager:
         Returns:
             Reasoning results dictionary
         """
-        # Determine which API to use based on availability and query complexity
-        if self.deepseek_api_key and self._is_complex_reasoning(query):
+        # By default, use DeepSeek for general reasoning
+        if self.deepseek_api_key:
             return self._call_deepseek_api(query, context)
-        elif self.sonnet_api_key:
-            return self._call_sonnet_api(query, context)
+        elif self.claude_api_key:
+            return self._call_claude_api(query, context)
+        else:
+            self.logger.error("No reasoning APIs available")
+            return {
+                "error": "No reasoning APIs configured",
+                "reasoning": "Unable to process reasoning request due to missing API configuration."
+            }
+    
+    def get_advanced_reasoning(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Get advanced reasoning results for complex tasks (code generation, analysis)
+        
+        Args:
+            query: The question or problem to reason about
+            context: Additional context for reasoning
+            
+        Returns:
+            Reasoning results dictionary
+        """
+        # Use Claude for advanced reasoning (code generation, analysis)
+        if self.claude_api_key:
+            return self._call_claude_api(query, context)
         elif self.deepseek_api_key:
             return self._call_deepseek_api(query, context)
         else:
@@ -72,27 +102,9 @@ class APIManager:
                 "reasoning": "Unable to process reasoning request due to missing API configuration."
             }
     
-    def _is_complex_reasoning(self, query: str) -> bool:
-        """
-        Determine if a query requires complex reasoning
-        
-        Args:
-            query: The query to analyze
-            
-        Returns:
-            True if complex reasoning is needed
-        """
-        # Simple heuristic - can be improved later
-        complex_indicators = [
-            "why", "how", "explain", "analyze", "compare", "evaluate",
-            "synthesize", "design", "develop", "create", "optimize"
-        ]
-        
-        return any(indicator in query.lower() for indicator in complex_indicators)
-    
     def _call_deepseek_api(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Call the DeepSeek-R1 API for reasoning
+        Call the DeepSeek API for reasoning
         
         Args:
             query: The query to reason about
@@ -101,7 +113,7 @@ class APIManager:
         Returns:
             Reasoning results
         """
-        self.logger.info("Using DeepSeek-R1 for reasoning")
+        self.logger.info(f"Using {self.deepseek_model} for reasoning")
         
         # Prepare context for the API
         formatted_context = self._format_context_for_deepseek(context)
@@ -113,13 +125,13 @@ class APIManager:
             }
             
             payload = {
-                "model": "deepseek-r1",
+                "model": self.deepseek_model,
                 "messages": [
                     {"role": "system", "content": "You are Hohenheim, an advanced AGI system. Provide detailed, logical reasoning for the query."},
                     {"role": "user", "content": f"Query: {query}\nContext: {formatted_context}"}
                 ],
-                "temperature": 0.2,
-                "max_tokens": 2000
+                "temperature": self.deepseek_temperature,
+                "max_tokens": self.deepseek_max_tokens
             }
             
             response = requests.post(
@@ -139,15 +151,15 @@ class APIManager:
                 
                 return {
                     "reasoning": reasoning_text,
-                    "source": "deepseek-r1",
+                    "source": self.deepseek_model,
                     "importance": importance
                 }
             else:
                 self.logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
-                # Fall back to Sonnet if available
-                if self.sonnet_api_key:
-                    self.logger.info("Falling back to Sonnet API")
-                    return self._call_sonnet_api(query, context)
+                # Fall back to Claude if available
+                if self.claude_api_key:
+                    self.logger.info("Falling back to Claude API")
+                    return self._call_claude_api(query, context)
                 return {
                     "error": f"DeepSeek API error: {response.status_code}",
                     "reasoning": "Unable to process reasoning request due to API error."
@@ -160,9 +172,9 @@ class APIManager:
                 "reasoning": "Unable to process reasoning request due to an exception."
             }
     
-    def _call_sonnet_api(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _call_claude_api(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Call the Sonnet-3.7 API for reasoning
+        Call the Claude API for reasoning
         
         Args:
             query: The query to reason about
@@ -171,29 +183,29 @@ class APIManager:
         Returns:
             Reasoning results
         """
-        self.logger.info("Using Sonnet-3.7 for reasoning")
+        self.logger.info(f"Using {self.claude_model} for reasoning")
         
         # Prepare context for the API
-        formatted_context = self._format_context_for_sonnet(context)
+        formatted_context = self._format_context_for_claude(context)
         
         try:
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.sonnet_api_key}"
+                "x-api-key": self.claude_api_key,
+                "anthropic-version": "2023-06-01"
             }
             
             payload = {
-                "model": "sonnet-3.7",
+                "model": self.claude_model,
                 "messages": [
-                    {"role": "system", "content": "You are Hohenheim, an advanced AGI system. Provide detailed, logical reasoning for the query."},
-                    {"role": "user", "content": f"Query: {query}\nContext: {formatted_context}"}
+                    {"role": "user", "content": f"You are Hohenheim, an advanced AGI system. Provide detailed, logical reasoning for the following query:\n\nQuery: {query}\nContext: {formatted_context}"}
                 ],
-                "temperature": 0.3,
-                "max_tokens": 1500
+                "temperature": self.claude_temperature,
+                "max_tokens": self.claude_max_tokens
             }
             
             response = requests.post(
-                self.sonnet_endpoint,
+                self.claude_endpoint,
                 headers=headers,
                 json=payload
             )
@@ -202,31 +214,31 @@ class APIManager:
                 result = response.json()
                 
                 # Process and structure the response
-                reasoning_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                reasoning_text = result.get("content", [{}])[0].get("text", "")
                 
                 # Extract importance score from reasoning (if available)
-                importance = 0.7  # Default importance for Sonnet responses
+                importance = 0.9  # Default importance for Claude responses (higher than DeepSeek)
                 
                 return {
                     "reasoning": reasoning_text,
-                    "source": "sonnet-3.7",
+                    "source": self.claude_model,
                     "importance": importance
                 }
             else:
-                self.logger.error(f"Sonnet API error: {response.status_code} - {response.text}")
+                self.logger.error(f"Claude API error: {response.status_code} - {response.text}")
                 # Fall back to DeepSeek if available
                 if self.deepseek_api_key:
                     self.logger.info("Falling back to DeepSeek API")
                     return self._call_deepseek_api(query, context)
                 return {
-                    "error": f"Sonnet API error: {response.status_code}",
+                    "error": f"Claude API error: {response.status_code}",
                     "reasoning": "Unable to process reasoning request due to API error."
                 }
                 
         except Exception as e:
-            self.logger.error(f"Error calling Sonnet API: {str(e)}")
+            self.logger.error(f"Error calling Claude API: {str(e)}")
             return {
-                "error": f"Sonnet API exception: {str(e)}",
+                "error": f"Claude API exception: {str(e)}",
                 "reasoning": "Unable to process reasoning request due to an exception."
             }
     
@@ -248,7 +260,7 @@ class APIManager:
         
         return "\n".join(formatted_parts)
     
-    def _format_context_for_sonnet(self, context: Dict[str, Any] = None) -> str:
-        """Format context for Sonnet API"""
+    def _format_context_for_claude(self, context: Dict[str, Any] = None) -> str:
+        """Format context for Claude API"""
         # Similar to DeepSeek formatting but with slight adjustments if needed
         return self._format_context_for_deepseek(context)
