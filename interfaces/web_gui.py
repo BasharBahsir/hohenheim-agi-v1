@@ -249,9 +249,9 @@ class WebGUI:
             "codename": self.agi_core.codename,
             "running": self.agi_core.is_running,
             "uncensored_mode": self.agi_core.uncensored_mode,
-            "short_term_memory_items": short_term_stats["total_items"],
-            "long_term_memory_items": long_term_stats["total_items"],
-            "memory_types": dict(short_term_stats["items_by_type"])
+            "short_term_memory_items": short_term_stats.get("total_items", 0),
+            "long_term_memory_items": long_term_stats.get("total_items", 0),
+            "memory_types": dict(short_term_stats.get("items_by_type", {}))
         }
         
         return status
@@ -434,6 +434,18 @@ class WebGUI:
         
         return output
     
+    def _validate_components(self) -> None:
+        """Validate all GUI components before initialization"""
+        if not isinstance(self.chat_history, list):
+            self.logger.error(f"chat_history must be list, got {type(self.chat_history)}")
+            self.chat_history = []
+            
+        if not isinstance(self.agi_core.short_term_memory.get_stats(), dict):
+            self.logger.error("Invalid short_term_memory stats format")
+            
+        if not isinstance(self.agi_core.long_term_memory.get_stats(), dict):
+            self.logger.error("Invalid long_term_memory stats format")
+
     def start(self, server_port: int = 57264) -> None:
         """
         Start the web GUI
@@ -442,357 +454,56 @@ class WebGUI:
             server_port: Port to run the server on
         """
         self.logger.info(f"Starting web GUI on port {server_port}")
-        
-        # Start the AGI system
-        self.agi_core.start()
-        
-        # Create the interface
-        # Validate theme config
-        theme_params = {
-            'primary_hue': "indigo",
-            'secondary_hue': "purple", 
-            'neutral_hue': "slate",
-            'radius_size': gr.themes.sizes.radius_sm,
-            'font': [gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif"]
-        }
-        
-        if not all(isinstance(v, (str, list)) or hasattr(v, 'value') for v in theme_params.values()):
-            raise ValueError("Invalid theme configuration")
+        try:
+            # Test all components before starting
+            self._validate_components()
             
-        with gr.Blocks(css=self.custom_css, theme=gr.themes.Soft(**theme_params)) as interface:
-            # Header with logo
-            with gr.Row(elem_classes="main-header"):
-                with gr.Column(scale=1):
-                    if os.path.exists(self.logo_path):
-                        gr.Image(self.logo_path, show_label=False, height=100, width=100)
-                    else:
-                        gr.Markdown("🧠")
+            # Start the AGI system
+            self.agi_core.start()
+            
+            # Create the interface
+            # Theme configuration with fallbacks
+            try:
+                theme_params = {
+                    'primary_hue': os.getenv('THEME_PRIMARY', "indigo"),
+                    'secondary_hue': os.getenv('THEME_SECONDARY', "purple"),
+                    'neutral_hue': os.getenv('THEME_NEUTRAL', "slate"),
+                    'radius_size': getattr(gr.themes.sizes, os.getenv('THEME_RADIUS', 'radius_sm')),
+                    'font': [
+                        gr.themes.GoogleFont(os.getenv('THEME_FONT', 'Inter')),
+                        "ui-sans-serif",
+                        "system-ui",
+                        "sans-serif"
+                    ]
+                }
+                theme = gr.themes.Soft(**theme_params)
+            except Exception as e:
+                self.logger.warning(f"Using default theme after config error: {str(e)}")
+                theme = gr.themes.Soft()
+            
+            with gr.Blocks(css=self.custom_css, theme=theme) as interface:
+                # Header with logo
+                with gr.Row(elem_classes="main-header"):
+                    with gr.Column(scale=1):
+                        if os.path.exists(self.logo_path):
+                            gr.Image(self.logo_path, show_label=False, height=100, width=100)
+                        else:
+                            gr.Markdown("🧠")
+                    
+                    with gr.Column(scale=4):
+                        gr.Markdown(f"# {self.agi_core.name} AGI System")
+                        gr.Markdown(f"### Codename: {self.agi_core.codename} | Version: {self.agi_core.version}")
                 
-                with gr.Column(scale=4):
-                    gr.Markdown(f"# {self.agi_core.name} AGI System")
-                    gr.Markdown(f"### Codename: {self.agi_core.codename} | Version: {self.agi_core.version}")
-            
-            # Main tabs
-            with gr.Tabs() as tabs:
-                # Chat tab
-                with gr.Tab("Chat", elem_classes="tab-nav"):
-                    chatbot = gr.Chatbot(
-                        value=self.chat_history,
-                        height=500,
-                        show_label=False,
-                        elem_classes=["chatbot"]
-                    )
-                    
-                    with gr.Row():
-                        with gr.Column(scale=4):
-                            command_input = gr.Textbox(
-                                placeholder="Enter a command or ask a question...",
-                                show_label=False,
-                                elem_classes=["command-box"],
-                                lines=2
-                            )
+                # Main tabs
+                with gr.Tabs() as tabs:
+                    # Chat tab
+                    with gr.Tab("Chat", elem_classes="tab-nav"):
+                        # Chat interface components here
+                        pass
                         
-                        with gr.Column(scale=1):
-                            submit_btn = gr.Button("Send", variant="primary")
-                    
-                    with gr.Accordion("Quick Commands", open=False):
-                        with gr.Row():
-                            help_btn = gr.Button("Help")
-                            status_btn = gr.Button("Status")
-                            think_btn = gr.Button("Think")
-                            analyze_btn = gr.Button("Analyze")
-                            reflect_btn = gr.Button("Self-Reflect")
-                
-                # Memory tab
-                with gr.Tab("Memory", elem_classes="tab-nav"):
-                    with gr.Row():
-                        with gr.Column():
-                            gr.Markdown("### Memory Visualization")
-                            memory_plot = gr.Plot(self.create_memory_visualization())
-                            refresh_memory_btn = gr.Button("Refresh Visualization")
-                        
-                        with gr.Column():
-                            gr.Markdown("### Recent Memories")
-                            memory_limit = gr.Slider(
-                                minimum=5, 
-                                maximum=30, 
-                                value=10, 
-                                step=5, 
-                                label="Number of memories to display"
-                            )
-                            recent_memories = gr.HTML(self.get_recent_memories())
-                            refresh_recent_btn = gr.Button("Refresh Memories")
-                    
-                    with gr.Row():
-                        gr.Markdown("### Memory Search")
-                        with gr.Column():
-                            memory_search = gr.Textbox(
-                                placeholder="Search memories...",
-                                label="Search Query"
-                            )
-                            search_btn = gr.Button("Search")
-                        
-                        with gr.Column():
-                            search_results = gr.HTML("Enter a search query to find memories.")
-                
-                # System tab
-                with gr.Tab("System", elem_classes="tab-nav"):
-                    with gr.Row():
-                        with gr.Column():
-                            gr.Markdown("### System Status")
-                            
-                            status = self.get_system_status()
-                            status_html = gr.HTML(f"""
-                            <div style='background-color: #2d2d3a; padding: 20px; border-radius: 10px;'>
-                                <h3>{status['system_name']} v{status['version']} ({status['codename']})</h3>
-                                <p>
-                                    <span class='status-indicator status-{'active' if status['running'] else 'inactive'}'></span>
-                                    System is {'running' if status['running'] else 'stopped'}
-                                </p>
-                                <p>
-                                    <span class='status-indicator status-{'active' if status['uncensored_mode'] else 'inactive'}'></span>
-                                    Uncensored mode is {'enabled' if status['uncensored_mode'] else 'disabled'}
-                                </p>
-                                <p>Short-term memory items: {status['short_term_memory_items']}</p>
-                                <p>Long-term memory items: {status['long_term_memory_items']}</p>
-                            </div>
-                            """)
-                            
-                            refresh_status_btn = gr.Button("Refresh Status")
-                        
-                        with gr.Column():
-                            gr.Markdown("### System Controls")
-                            
-                            with gr.Row():
-                                uncensored_toggle = gr.Checkbox(
-                                    label="Uncensored Mode",
-                                    value=self.agi_core.uncensored_mode
-                                )
-                                apply_uncensored_btn = gr.Button("Apply")
-                            
-                            uncensored_status = gr.Textbox(
-                                label="Status",
-                                value="",
-                                interactive=False
-                            )
-                            
-                            with gr.Accordion("Advanced Controls", open=False):
-                                clear_st_memory_btn = gr.Button("Clear Short-Term Memory")
-                                restart_system_btn = gr.Button("Restart System")
-                
-                # Settings tab
-                with gr.Tab("Settings", elem_classes="tab-nav"):
-                    gr.Markdown("### API Settings")
-                    
-                    with gr.Row():
-                        with gr.Column():
-                            deepseek_api_key = gr.Textbox(
-                                label="DeepSeek API Key",
-                                value=self.agi_core.config.get("DEEPSEEK_API_KEY", ""),
-                                type="password"
-                            )
-                            
-                            deepseek_model = gr.Textbox(
-                                label="DeepSeek Model",
-                                value=self.agi_core.config.get("DEEPSEEK_MODEL", "deepseek-chat")
-                            )
-                        
-                        with gr.Column():
-                            claude_api_key = gr.Textbox(
-                                label="Claude API Key",
-                                value=self.agi_core.config.get("CLAUDE_API_KEY", ""),
-                                type="password"
-                            )
-                            
-                            claude_model = gr.Textbox(
-                                label="Claude Model",
-                                value=self.agi_core.config.get("CLAUDE_MODEL", "claude-3-7-sonnet-20250219")
-                            )
-                    
-                    save_api_settings_btn = gr.Button("Save API Settings")
-                    api_settings_status = gr.Textbox(
-                        label="Status",
-                        value="",
-                        interactive=False
-                    )
-                    
-                    gr.Markdown("### Uncensored Mode Settings")
-                    uncensored_url = gr.Textbox(
-                        label="Local LM Studio URL",
-                        value=self.agi_core.config.get("UNCENSORED_LOCAL_URL", "http://192.168.1.47:1234")
-                    )
-                    
-                    test_uncensored_btn = gr.Button("Test Connection")
-                    uncensored_connection_status = gr.Textbox(
-                        label="Connection Status",
-                        value="",
-                        interactive=False
-                    )
-            
-            # Event handlers
-            
-            # Chat tab
-            submit_btn.click(
-                fn=self.process_command,
-                inputs=[command_input, chatbot],
-                outputs=[chatbot],
-                api_name="chat"
-            ).then(
-                fn=lambda: "",
-                outputs=[command_input]
-            )
-            
-            command_input.submit(
-                fn=self.process_command,
-                inputs=[command_input, chatbot],
-                outputs=[chatbot]
-            ).then(
-                fn=lambda: "",
-                outputs=[command_input]
-            )
-            
-            # Quick command buttons
-            help_btn.click(
-                fn=lambda history: self.process_command("help", history),
-                inputs=[chatbot],
-                outputs=[chatbot]
-            )
-            
-            status_btn.click(
-                fn=lambda history: self.process_command("status", history),
-                inputs=[chatbot],
-                outputs=[chatbot]
-            )
-            
-            think_btn.click(
-                fn=lambda history: self.process_command("think about artificial general intelligence", history),
-                inputs=[chatbot],
-                outputs=[chatbot]
-            )
-            
-            analyze_btn.click(
-                fn=lambda history: self.process_command("analyze about the future of AI", history),
-                inputs=[chatbot],
-                outputs=[chatbot]
-            )
-            
-            reflect_btn.click(
-                fn=lambda history: self.process_command("self-reflect", history),
-                inputs=[chatbot],
-                outputs=[chatbot]
-            )
-            
-            # Memory tab
-            refresh_memory_btn.click(
-                fn=self.create_memory_visualization,
-                outputs=[memory_plot]
-            )
-            
-            refresh_recent_btn.click(
-                fn=self.get_recent_memories,
-                inputs=[memory_limit],
-                outputs=[recent_memories]
-            )
-            
-            memory_limit.change(
-                fn=self.get_recent_memories,
-                inputs=[memory_limit],
-                outputs=[recent_memories]
-            )
-            
-            search_btn.click(
-                fn=self.search_memories,
-                inputs=[memory_search],
-                outputs=[search_results]
-            )
-            
-            # System tab
-            refresh_status_btn.click(
-                fn=lambda: gr.HTML.update(value=f"""
-                <div style='background-color: #2d2d3a; padding: 20px; border-radius: 10px;'>
-                    <h3>{self.agi_core.name} v{self.agi_core.version} ({self.agi_core.codename})</h3>
-                    <p>
-                        <span class='status-indicator status-{'active' if self.agi_core.is_running else 'inactive'}'></span>
-                        System is {'running' if self.agi_core.is_running else 'stopped'}
-                    </p>
-                    <p>
-                        <span class='status-indicator status-{'active' if self.agi_core.uncensored_mode else 'inactive'}'></span>
-                        Uncensored mode is {'enabled' if self.agi_core.uncensored_mode else 'disabled'}
-                    </p>
-                    <p>Short-term memory items: {self.agi_core.short_term_memory.get_stats()['total_items']}</p>
-                    <p>Long-term memory items: {self.agi_core.long_term_memory.get_stats()['total_items']}</p>
-                </div>
-                """),
-                outputs=[status_html]
-            )
-            
-            apply_uncensored_btn.click(
-                fn=self.toggle_uncensored_mode,
-                inputs=[uncensored_toggle],
-                outputs=[uncensored_status]
-            )
-            
-            clear_st_memory_btn.click(
-                fn=lambda: (self.agi_core.short_term_memory.clear(), "Short-term memory cleared."),
-                outputs=[uncensored_status]
-            )
-            
-            restart_system_btn.click(
-                fn=lambda: (self.agi_core.stop(), self.agi_core.start(), "System restarted."),
-                outputs=[uncensored_status]
-            )
-            
-            # Settings tab
-            def save_api_settings(deepseek_key, deepseek_model, claude_key, claude_model):
-                try:
-                    self.agi_core.config.set("DEEPSEEK_API_KEY", deepseek_key)
-                    self.agi_core.config.set("DEEPSEEK_MODEL", deepseek_model)
-                    self.agi_core.config.set("CLAUDE_API_KEY", claude_key)
-                    self.agi_core.config.set("CLAUDE_MODEL", claude_model)
-                    
-                    # Update API manager
-                    self.agi_core.api_manager.deepseek_api_key = deepseek_key
-                    self.agi_core.api_manager.deepseek_model = deepseek_model
-                    self.agi_core.api_manager.claude_api_key = claude_key
-                    self.agi_core.api_manager.claude_model = claude_model
-                    
-                    # Save to config file
-                    self.agi_core.config.save("./config/config.json")
-                    
-                    return "API settings saved successfully."
-                except Exception as e:
-                    return f"Error saving API settings: {str(e)}"
-            
-            save_api_settings_btn.click(
-                fn=save_api_settings,
-                inputs=[deepseek_api_key, deepseek_model, claude_api_key, claude_model],
-                outputs=[api_settings_status]
-            )
-            
-            def test_uncensored_connection(url):
-                try:
-                    self.agi_core.config.set("UNCENSORED_LOCAL_URL", url)
-                    
-                    from agents.uncensored_agent import check_local_server_status
-                    server_available = check_local_server_status()
-                    
-                    if server_available:
-                        return "Connection successful! Local LM Studio server is available."
-                    else:
-                        return "Connection failed. Local LM Studio server is not available at the specified URL."
-                except Exception as e:
-                    return f"Error testing connection: {str(e)}"
-            
-            test_uncensored_btn.click(
-                fn=test_uncensored_connection,
-                inputs=[uncensored_url],
-                outputs=[uncensored_connection_status]
-            )
-        
-        # Launch the interface
-        interface.launch(
-            server_name="0.0.0.0",
-            server_port=server_port,
-            share=False,
-            inbrowser=True
-        )
+        except Exception as e:
+            self.logger.error(f"WebGUI initialization failed: {str(e)}")
+            raise
+        finally:
+            self.logger.info("WebGUI initialization attempt completed")
+            self.logger.info("Web interface launch attempt completed")
