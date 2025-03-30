@@ -61,8 +61,9 @@ class HohenheimAGI:
         # Uncensored mode flag
         self.uncensored_mode = False
         
-        # Evolution agent (initialized later if needed)
+        # Evolution agent and self-evolution framework (initialized later if needed)
         self.evolution_agent = None
+        self.self_evolution = None
         
         # System state
         self.is_running = False
@@ -79,6 +80,18 @@ class HohenheimAGI:
         
         self.logger.info(f"{self.name} AGI System initialization complete")
     
+    def initialize_self_evolution(self) -> None:
+        """Initialize the self-evolution framework"""
+        try:
+            from agents.self_evolution import SelfEvolutionFramework
+            self.logger.info("Initializing self-evolution framework")
+            self.self_evolution = SelfEvolutionFramework(self)
+            self.capabilities["self_evolution"] = True
+            self.logger.info("Self-evolution framework initialized")
+        except Exception as e:
+            self.logger.error(f"Error initializing self-evolution framework: {str(e)}")
+            self.capabilities["self_evolution"] = False
+    
     def start(self) -> None:
         """Start the AGI system and all its components"""
         self.is_running = True
@@ -88,6 +101,15 @@ class HohenheimAGI:
         if hasattr(self, 'evolution_agent') and self.evolution_agent is not None:
             self.capabilities["evolution"] = True
             self.logger.info("Evolution capability enabled")
+            
+            # Initialize self-evolution if evolution agent is available
+            if not hasattr(self, 'self_evolution') or self.self_evolution is None:
+                self.initialize_self_evolution()
+        
+        # Start self-evolution monitor if available
+        if hasattr(self, 'self_evolution') and self.self_evolution is not None:
+            self.logger.info("Starting self-evolution monitor")
+            self.self_evolution.start_evolution_monitor()
         
         # Record system start in memory
         self.short_term_memory.add("system_event", {
