@@ -447,13 +447,19 @@ class WebGUI:
         self.agi_core.start()
         
         # Create the interface
-        with gr.Blocks(css=self.custom_css, theme=gr.themes.Soft(
-            primary_hue="indigo",
-            secondary_hue="purple",
-            neutral_hue="slate",
-            radius_size=gr.themes.sizes.radius_sm,
-            font=[gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif"],
-        )) as interface:
+        # Validate theme config
+        theme_params = {
+            'primary_hue': "indigo",
+            'secondary_hue': "purple", 
+            'neutral_hue': "slate",
+            'radius_size': gr.themes.sizes.radius_sm,
+            'font': [gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif"]
+        }
+        
+        if not all(isinstance(v, (str, list)) or hasattr(v, 'value') for v in theme_params.values()):
+            raise ValueError("Invalid theme configuration")
+            
+        with gr.Blocks(css=self.custom_css, theme=gr.themes.Soft(**theme_params)) as interface:
             # Header with logo
             with gr.Row(elem_classes="main-header"):
                 with gr.Column(scale=1):
