@@ -114,6 +114,37 @@ class CommandRouter:
             self._handle_create_component_command,
             "Create a new component (e.g., 'create component agent MyAgent description')"
         )
+        
+        # Self-evolution commands
+        self.register_command(
+            r"^start\s+evolution$",
+            self._handle_start_evolution_command,
+            "Start the self-evolution process"
+        )
+        
+        self.register_command(
+            r"^evaluate\s+performance$",
+            self._handle_evaluate_performance_command,
+            "Evaluate the system's performance"
+        )
+        
+        self.register_command(
+            r"^approve\s+evolution\s+(\d{8}-\d{6})$",
+            self._handle_approve_evolution_command,
+            "Approve a pending evolution (e.g., 'approve evolution 20250330-123456')"
+        )
+        
+        self.register_command(
+            r"^evolution\s+status$",
+            self._handle_evolution_status_command,
+            "Check the status of the self-evolution process"
+        )
+        
+        self.register_command(
+            r"^evolution\s+config(?:\s+(.+))?$",
+            self._handle_evolution_config_command,
+            "Get or update the evolution configuration"
+        )
     
     def register_command(self, pattern: str, handler: Callable, description: str = "") -> None:
         """
@@ -445,6 +476,17 @@ class CommandRouter:
         Returns:
             Response dictionary
         """
+        # Check for natural language evolution triggers if self-evolution is available
+        if hasattr(self.agi_core, 'self_evolution') and self.agi_core.self_evolution is not None:
+            trigger_result = self.agi_core.self_evolution.process_natural_language_trigger(text)
+            if trigger_result.get("success", False):
+                return {
+                    "message": f"Evolution trigger detected: {trigger_result.get('message', '')}",
+                    "status": trigger_result.get("status"),
+                    "timestamp": trigger_result.get("timestamp"),
+                    "success": True
+                }
+        
         # Use reasoning to generate a response
         reasoning_result = self.agi_core.reason(text, context)
         
@@ -453,3 +495,150 @@ class CommandRouter:
             "type": "conversation",
             "success": True
         }
+    def _handle_start_evolution_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the start evolution command"""
+        # Check if self-evolution framework is available
+        if not hasattr(self.agi_core, 'self_evolution') or self.agi_core.self_evolution is None:
+            return {
+                "message": "Self-evolution framework is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Start the evolution process
+        result = self.agi_core.self_evolution.start_evolution_process()
+        
+        if result.get("success", False):
+            return {
+                "message": f"Self-evolution process started. {result.get('message', '')}",
+                "status": result.get("status"),
+                "timestamp": result.get("timestamp"),
+                "success": True
+            }
+        else:
+            return {
+                "message": f"Failed to start self-evolution: {result.get('message', 'Unknown error')}",
+                "success": False
+            }
+    
+    def _handle_evaluate_performance_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the evaluate performance command"""
+        # Check if self-evolution framework is available
+        if not hasattr(self.agi_core, 'self_evolution') or self.agi_core.self_evolution is None:
+            return {
+                "message": "Self-evolution framework is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Evaluate performance
+        metrics = self.agi_core.self_evolution.evaluate_performance()
+        
+        return {
+            "message": "Performance evaluation completed",
+            "metrics": metrics,
+            "success": True
+        }
+    
+    def _handle_approve_evolution_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the approve evolution command"""
+        # Check if self-evolution framework is available
+        if not hasattr(self.agi_core, 'self_evolution') or self.agi_core.self_evolution is None:
+            return {
+                "message": "Self-evolution framework is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Get the timestamp
+        timestamp = match.group(1)
+        
+        # Approve the evolution
+        result = self.agi_core.self_evolution.approve_evolution(timestamp)
+        
+        if result.get("success", False):
+            return {
+                "message": f"Evolution approved and applied: {result.get('message', '')}",
+                "applied_files": result.get("applied_files", []),
+                "success": True
+            }
+        else:
+            return {
+                "message": f"Failed to approve evolution: {result.get('message', 'Unknown error')}",
+                "success": False
+            }
+    
+    def _handle_evolution_status_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the evolution status command"""
+        # Check if self-evolution framework is available
+        if not hasattr(self.agi_core, 'self_evolution') or self.agi_core.self_evolution is None:
+            return {
+                "message": "Self-evolution framework is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Get evolution status
+        is_evolving = self.agi_core.self_evolution.is_evolving
+        last_evolution_time = self.agi_core.self_evolution.last_evolution_time
+        
+        if last_evolution_time:
+            import datetime
+            last_time_str = datetime.datetime.fromtimestamp(last_evolution_time).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            last_time_str = "Never"
+        
+        # Get evolution history
+        history = self.agi_core.self_evolution.get_evolution_history()
+        
+        return {
+            "message": f"Evolution Status: {'Running' if is_evolving else 'Idle'}",
+            "is_evolving": is_evolving,
+            "last_evolution_time": last_time_str,
+            "evolution_count": len(history),
+            "success": True
+        }
+    
+    def _handle_evolution_config_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the evolution config command"""
+        # Check if self-evolution framework is available
+        if not hasattr(self.agi_core, 'self_evolution') or self.agi_core.self_evolution is None:
+            return {
+                "message": "Self-evolution framework is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Check if we're updating or just getting the config
+        config_str = match.group(1)
+        
+        if config_str:
+            # Parse the config string
+            try:
+                import json
+                new_config = json.loads(config_str)
+                
+                # Update the config
+                updated_config = self.agi_core.self_evolution.update_config(new_config)
+                
+                return {
+                    "message": "Evolution configuration updated",
+                    "config": updated_config,
+                    "success": True
+                }
+            except Exception as e:
+                return {
+                    "message": f"Error updating evolution configuration: {str(e)}",
+                    "success": False
+                }
+        else:
+            # Just get the current config
+            config = self.agi_core.self_evolution.get_config()
+            
+            # Convert enum to string for display
+            if "trigger_type" in config and hasattr(config["trigger_type"], "value"):
+                config_display = config.copy()
+                config_display["trigger_type"] = config["trigger_type"].value
+            else:
+                config_display = config
+            
+            return {
+                "message": "Current evolution configuration",
+                "config": config_display,
+                "success": True
+            }
