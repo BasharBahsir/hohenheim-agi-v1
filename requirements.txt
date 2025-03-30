@@ -1,0 +1,24 @@
+# Core dependencies
+python-dotenv>=1.0.0
+requests>=2.28.0
+pyyaml>=6.0
+
+# Memory systems
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.0  # or faiss-gpu for GPU support
+
+# For uncensored mode (optional)
+# Uncomment if you want to use the local Qwen model
+# transformers>=4.30.0
+# torch>=2.0.0
+# accelerate>=0.20.0
+
+# For GUI interface (future)
+# PyQt6>=6.5.0
+# or
+# tkinter (comes with Python)
+
+# For voice interface (future)
+# SpeechRecognition>=3.10.0
+# pyttsx3>=2.90
