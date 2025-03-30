@@ -24,8 +24,8 @@ def parse_arguments():
     
     parser.add_argument(
         "--interface", "-i",
-        help="Interface to use (cli, web, api)",
-        choices=["cli", "web", "api"],
+        help="Interface to use (cli, web, api, telegram)",
+        choices=["cli", "web", "api", "telegram"],
         default="cli"
     )
     
@@ -116,19 +116,25 @@ def main():
     if args.interface == "cli":
         interface = TerminalInterface(agi)
         interface.start()
+    elif args.interface == "voice":
+        try:
+            from interfaces.voice_assistant import VoiceAssistant
+            interface = VoiceAssistant()
+            interface.run_cycle()
+        except Exception as e:
+            logging.error(f"Error starting voice interface: {str(e)}")
+            sys.exit(1)
     elif args.interface == "web":
         try:
             from interfaces.web_gui import WebGUI
             web_gui = WebGUI(agi)
             web_gui.start(server_port=args.port)
         except ImportError as e:
-            logging.error(f"Web GUI dependencies not installed: {str(e)}")
-            print(f"Web GUI dependencies not installed: {str(e)}")
+            logging.error(f"Web interface dependencies missing: {str(e)}")
             print("Install required packages with: pip install gradio plotly pandas pillow")
             sys.exit(1)
         except Exception as e:
-            logging.error(f"Error starting web GUI: {str(e)}")
-            print(f"Error starting web GUI: {str(e)}")
+            logging.error(f"Error starting web interface: {str(e)}")
             sys.exit(1)
     elif args.interface == "api":
         try:
