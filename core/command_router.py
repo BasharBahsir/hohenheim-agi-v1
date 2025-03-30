@@ -95,6 +95,25 @@ class CommandRouter:
             lambda match, context: self._handle_uncensored_mode_command(match, context, False),
             "Disable uncensored mode"
         )
+        
+        # Evolution commands (if evolution agent is available)
+        self.register_command(
+            r"^analyze\s+codebase$", 
+            self._handle_analyze_codebase_command,
+            "Analyze the codebase for potential improvements"
+        )
+        
+        self.register_command(
+            r"^improve\s+code\s+(.+)$", 
+            self._handle_improve_code_command,
+            "Generate code improvement for a specific issue"
+        )
+        
+        self.register_command(
+            r"^create\s+component\s+(\w+)\s+(\w+)\s+(.+)$", 
+            self._handle_create_component_command,
+            "Create a new component (e.g., 'create component agent MyAgent description')"
+        )
     
     def register_command(self, pattern: str, handler: Callable, description: str = "") -> None:
         """
@@ -295,6 +314,125 @@ class CommandRouter:
                 "uncensored_mode": False,
                 "success": True
             }
+    
+    def _handle_analyze_codebase_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the analyze codebase command"""
+        # Check if evolution agent is available
+        if not hasattr(self.agi_core, 'evolution_agent') or self.agi_core.evolution_agent is None:
+            return {
+                "message": "Evolution agent is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Analyze the codebase
+        analysis = self.agi_core.evolution_agent.analyze_codebase()
+        
+        # Format the response
+        response = {
+            "message": "Codebase Analysis Results:",
+            "analysis": {
+                "total_files": analysis.get("total_files", 0),
+                "total_lines": analysis.get("total_lines", 0),
+                "total_functions": analysis.get("total_functions", 0),
+                "total_classes": analysis.get("total_classes", 0)
+            },
+            "improvement_suggestions": analysis.get("improvement_suggestions", ""),
+            "success": True
+        }
+        
+        return response
+    
+    def _handle_improve_code_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the improve code command"""
+        # Check if evolution agent is available
+        if not hasattr(self.agi_core, 'evolution_agent') or self.agi_core.evolution_agent is None:
+            return {
+                "message": "Evolution agent is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Get the issue description
+        issue_description = match.group(1)
+        
+        # Ask for the file path
+        if "file_path" not in context:
+            return {
+                "message": "Please specify the file path to improve.",
+                "success": False,
+                "needs_file_path": True
+            }
+        
+        file_path = context["file_path"]
+        
+        # Generate the improvement
+        improvement = self.agi_core.evolution_agent.generate_code_improvement(file_path, issue_description)
+        
+        if not improvement.get("success", False):
+            return {
+                "message": f"Failed to generate improvement: {improvement.get('error', 'Unknown error')}",
+                "success": False
+            }
+        
+        # Ask if the user wants to apply the improvement
+        if "apply_improvement" not in context:
+            return {
+                "message": "Generated code improvement:",
+                "original_content": improvement.get("original_content", ""),
+                "improved_content": improvement.get("improved_content", ""),
+                "reasoning": improvement.get("reasoning", ""),
+                "success": True,
+                "needs_confirmation": True
+            }
+        
+        # Apply the improvement if requested
+        if context["apply_improvement"]:
+            result = self.agi_core.evolution_agent.apply_improvement(improvement)
+            
+            if result.get("success", False):
+                return {
+                    "message": f"Successfully applied improvement to {file_path}",
+                    "backup_path": result.get("backup_path"),
+                    "success": True
+                }
+            else:
+                return {
+                    "message": f"Failed to apply improvement: {result.get('error', 'Unknown error')}",
+                    "success": False
+                }
+        else:
+            return {
+                "message": "Improvement not applied.",
+                "success": True
+            }
+    
+    def _handle_create_component_command(self, match, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle the create component command"""
+        # Check if evolution agent is available
+        if not hasattr(self.agi_core, 'evolution_agent') or self.agi_core.evolution_agent is None:
+            return {
+                "message": "Evolution agent is not initialized. Please start the system with --evolution flag.",
+                "success": False
+            }
+        
+        # Get the component details
+        component_type = match.group(1)
+        component_name = match.group(2)
+        description = match.group(3)
+        
+        # Generate the component
+        result = self.agi_core.evolution_agent.generate_new_component(component_type, component_name, description)
+        
+        if not result.get("success", False):
+            return {
+                "message": f"Failed to create component: {result.get('error', 'Unknown error')}",
+                "success": False
+            }
+        
+        return {
+            "message": f"Successfully created new {component_type} component: {component_name}",
+            "file_path": result.get("file_path"),
+            "success": True
+        }
     
     def _handle_conversation(self, text: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """

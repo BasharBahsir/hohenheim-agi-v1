@@ -8,17 +8,27 @@ chromadb>=0.4.0
 sentence-transformers>=2.2.0
 faiss-cpu>=1.7.0  # or faiss-gpu for GPU support
 
-# For uncensored mode (optional)
-# Uncomment if you want to use the local Qwen model
-# transformers>=4.30.0
-# torch>=2.0.0
-# accelerate>=0.20.0
+# GUI dependencies
+gradio>=4.0.0
+plotly>=5.14.0
+pandas>=2.0.0
+pillow>=9.5.0
 
-# For GUI interface (future)
-# PyQt6>=6.5.0
-# or
-# tkinter (comes with Python)
+# Web interface
+flask>=2.3.0
+flask-cors>=4.0.0
+websockets>=11.0.0
 
-# For voice interface (future)
-# SpeechRecognition>=3.10.0
-# pyttsx3>=2.90
+# For uncensored mode
+transformers>=4.30.0
+torch>=2.0.0
+accelerate>=0.20.0
+
+# For voice interface
+SpeechRecognition>=3.10.0
+pyttsx3>=2.90
+
+# For code generation and self-evolution
+black>=23.3.0
+pylint>=2.17.0
+autopep8>=2.0.0

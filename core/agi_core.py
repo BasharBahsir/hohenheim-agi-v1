@@ -29,7 +29,7 @@ class HohenheimAGI:
             config_path: Path to the configuration file
         """
         self.name = "Hohenheim"
-        self.version = "0.1.0"
+        self.version = "0.2.0"  # Updated for Phase 2
         self.codename = "Neo Jarvis"
         
         # Initialize logging
@@ -61,9 +61,21 @@ class HohenheimAGI:
         # Uncensored mode flag
         self.uncensored_mode = False
         
+        # Evolution agent (initialized later if needed)
+        self.evolution_agent = None
+        
         # System state
         self.is_running = False
         self.current_context = {}
+        
+        # System capabilities
+        self.capabilities = {
+            "reasoning": True,
+            "advanced_reasoning": True,
+            "memory": True,
+            "uncensored_mode": True,
+            "evolution": False  # Set to True when evolution agent is initialized
+        }
         
         self.logger.info(f"{self.name} AGI System initialization complete")
     
@@ -72,11 +84,17 @@ class HohenheimAGI:
         self.is_running = True
         self.logger.info(f"{self.name} AGI System started")
         
+        # Update capabilities based on available components
+        if hasattr(self, 'evolution_agent') and self.evolution_agent is not None:
+            self.capabilities["evolution"] = True
+            self.logger.info("Evolution capability enabled")
+        
         # Record system start in memory
         self.short_term_memory.add("system_event", {
             "type": "system_start",
             "timestamp": self.short_term_memory.get_timestamp(),
-            "version": self.version
+            "version": self.version,
+            "capabilities": self.capabilities
         })
     
     def stop(self) -> None:

@@ -1,10 +1,11 @@
 # Hohenheim AGI System
 
 ![Hohenheim AGI](https://img.shields.io/badge/Hohenheim-AGI%20System-blue)
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+![Version](https://img.shields.io/badge/version-0.2.0-green)
 ![Codename](https://img.shields.io/badge/codename-Neo%20Jarvis-orange)
+![Phase](https://img.shields.io/badge/phase-2-purple)
 
-An evolving, modular, memory-enabled AGI system that can self-reflect, self-rewrite, and expand autonomously.
+An evolving, modular, memory-enabled AGI system that can self-reflect, self-rewrite, and expand autonomously through OpenHands as its dev core.
 
 ## 🧪 Project Vision
 
@@ -59,8 +60,8 @@ Hohenheim_AGI_system/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/BasharBahsir/Hohenheim_AGI_system.git
-   cd Hohenheim_AGI_system
+   git clone https://github.com/BasharBahsir/hohenheim-agi-v1.git
+   cd hohenheim-agi-v1
    ```
 
 2. Install dependencies:
@@ -76,13 +77,38 @@ Hohenheim_AGI_system/
 
 ### Running Hohenheim
 
+#### Terminal Interface
+
 Start the AGI system with the CLI interface:
 
 ```bash
 python main.py
 ```
 
-Additional options:
+#### Web Interface (New in Phase 2)
+
+Start the AGI system with the modern web GUI:
+
+```bash
+python main.py --interface web
+```
+
+This will launch a beautiful, multi-functional web interface on port 57264. Access it at:
+http://localhost:57264
+
+#### API Interface (New in Phase 2)
+
+Start the AGI system with the RESTful API:
+
+```bash
+python main.py --interface api
+```
+
+This will launch an API server on port 57264. Documentation available at:
+http://localhost:57264/api/docs
+
+### Additional Options
+
 ```bash
 # Use a specific config file
 python main.py --config path/to/config.json
@@ -90,45 +116,65 @@ python main.py --config path/to/config.json
 # Start in uncensored mode
 python main.py --uncensored
 
+# Enable autonomous evolution capabilities
+python main.py --evolution
+
 # Set log level
 python main.py --log-level DEBUG
+
+# Specify port for web or API interface
+python main.py --interface web --port 8080
 ```
 
-## 💬 CLI Commands
+## 💬 Commands
 
 Once Hohenheim is running, you can interact with it using these commands:
 
+### Basic Commands
 - `help` - Display available commands
 - `status` - Show system status
+- `exit` - Stop the AGI system
+
+### Memory Commands
 - `remember <text>` - Store information in long-term memory
 - `recall <query>` - Retrieve information from memory
-- `think about <query>` - Use reasoning capabilities
-- `enable uncensored mode` - Switch to uncensored reasoning
+
+### Reasoning Commands
+- `think about <query>` - Use basic reasoning capabilities (DeepSeek)
+- `analyze about <query>` - Use advanced reasoning capabilities (Claude)
+- `reflect` or `self-reflect` - Perform system self-reflection
+
+### Mode Commands
+- `enable uncensored mode` - Switch to uncensored reasoning (local LM Studio)
 - `disable uncensored mode` - Return to standard reasoning
-- `exit` - Stop the AGI system
+
+### Evolution Commands (Phase 2)
+- `analyze codebase` - Analyze the codebase for potential improvements
+- `improve code <issue description>` - Generate code improvement for a specific issue
+- `create component <type> <name> <description>` - Create a new component
 
 ## 🔄 Development Roadmap
 
-### Phase 1 (Current)
+### Phase 1 (Completed)
 - Basic AGI skeleton
 - Memory systems
 - API integrations
 - Command routing
 - Terminal interface
 
-### Phase 2 (Upcoming)
-- Autonomous self-rewrites
+### Phase 2 (Current)
+- Autonomous self-evolution
 - Enhanced reasoning capabilities
-- GUI interface
-- Voice interface
-- Plugin system
+- Modern web GUI interface
+- RESTful API interface
+- Code analysis and improvement
 
-### Phase 3 (Future)
+### Phase 3 (Upcoming)
 - Advanced autonomous evolution
 - Multi-agent collaboration
 - External tool integration
 - Web browsing capabilities
-- Advanced self-reflection
+- Voice interface integration
 
 ## 🔧 Configuration
 

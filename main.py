@@ -7,6 +7,7 @@ import os
 import sys
 import argparse
 import logging
+import time
 
 from core.agi_core import HohenheimAGI
 from interfaces.cli import TerminalInterface
@@ -23,9 +24,16 @@ def parse_arguments():
     
     parser.add_argument(
         "--interface", "-i",
-        help="Interface to use (cli, gui, api)",
-        choices=["cli", "gui", "api"],
+        help="Interface to use (cli, web, api)",
+        choices=["cli", "web", "api"],
         default="cli"
+    )
+    
+    parser.add_argument(
+        "--port", "-p",
+        help="Port for web or API interface",
+        type=int,
+        default=57264
     )
     
     parser.add_argument(
@@ -41,6 +49,12 @@ def parse_arguments():
         action="store_true"
     )
     
+    parser.add_argument(
+        "--evolution", "-e",
+        help="Enable autonomous evolution",
+        action="store_true"
+    )
+    
     return parser.parse_args()
 
 def setup_logging(log_level):
@@ -52,14 +66,27 @@ def setup_logging(log_level):
     # Create logs directory if it doesn't exist
     os.makedirs("logs", exist_ok=True)
     
+    # Generate log filename with timestamp
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    log_file = f"logs/hohenheim-{timestamp}.log"
+    
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler("logs/hohenheim.log"),
+            logging.FileHandler(log_file),
             logging.StreamHandler(sys.stdout)
         ]
     )
+    
+    # Create a symlink to the latest log
+    latest_log = "logs/latest.log"
+    try:
+        if os.path.exists(latest_log):
+            os.remove(latest_log)
+        os.symlink(log_file, latest_log)
+    except Exception as e:
+        logging.warning(f"Could not create symlink to latest log: {str(e)}")
 
 def main():
     """Main entry point"""
@@ -76,20 +103,47 @@ def main():
     if args.uncensored:
         agi.toggle_uncensored_mode(True)
     
+    # Initialize evolution agent if requested
+    if args.evolution:
+        try:
+            from agents.evolution_agent import EvolutionAgent
+            agi.evolution_agent = EvolutionAgent(agi)
+            logging.info("Evolution agent initialized")
+        except Exception as e:
+            logging.error(f"Error initializing evolution agent: {str(e)}")
+    
     # Start the appropriate interface
     if args.interface == "cli":
         interface = TerminalInterface(agi)
         interface.start()
-    elif args.interface == "gui":
-        # GUI interface not implemented yet
-        logging.error("GUI interface not implemented yet")
-        print("GUI interface not implemented yet. Use --interface=cli instead.")
-        sys.exit(1)
+    elif args.interface == "web":
+        try:
+            from interfaces.web_gui import WebGUI
+            web_gui = WebGUI(agi)
+            web_gui.start(server_port=args.port)
+        except ImportError as e:
+            logging.error(f"Web GUI dependencies not installed: {str(e)}")
+            print(f"Web GUI dependencies not installed: {str(e)}")
+            print("Install required packages with: pip install gradio plotly pandas pillow")
+            sys.exit(1)
+        except Exception as e:
+            logging.error(f"Error starting web GUI: {str(e)}")
+            print(f"Error starting web GUI: {str(e)}")
+            sys.exit(1)
     elif args.interface == "api":
-        # API interface not implemented yet
-        logging.error("API interface not implemented yet")
-        print("API interface not implemented yet. Use --interface=cli instead.")
-        sys.exit(1)
+        try:
+            from interfaces.api import APIInterface
+            api = APIInterface(agi)
+            api.start(port=args.port)
+        except ImportError as e:
+            logging.error(f"API dependencies not installed: {str(e)}")
+            print(f"API dependencies not installed: {str(e)}")
+            print("Install required packages with: pip install flask flask-cors")
+            sys.exit(1)
+        except Exception as e:
+            logging.error(f"Error starting API interface: {str(e)}")
+            print(f"Error starting API interface: {str(e)}")
+            sys.exit(1)
     else:
         logging.error(f"Unknown interface: {args.interface}")
         print(f"Unknown interface: {args.interface}")
